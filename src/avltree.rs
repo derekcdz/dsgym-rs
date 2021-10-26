@@ -28,7 +28,7 @@ impl<T> Node<T> {
     }
 }
 
-impl<T: PartialOrd + Display> AVLTree<T> {
+impl<T: Ord> AVLTree<T> {
     pub fn new() -> Self {
         AVLTree {
             root: None
@@ -94,7 +94,9 @@ impl<T: PartialOrd + Display> AVLTree<T> {
     pub fn contains(&self, key: T) -> bool {
         Self::find(&self.root, key).is_some()
     }
+}
 
+impl<T: Display> AVLTree<T> {
     pub fn traverse_inner(node: &Link<T>) {
         node.as_ref().map(|x| {
             Self::traverse_inner(&x.as_ref().borrow().left);
@@ -102,7 +104,6 @@ impl<T: PartialOrd + Display> AVLTree<T> {
             Self::traverse_inner(&x.as_ref().borrow().right);
         });
     }
-
     pub fn traverse(&self) {
         Self::traverse_inner(&self.root);
     }
