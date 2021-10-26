@@ -1,9 +1,8 @@
-use std::borrow::{Borrow, BorrowMut};
-use std::cell::RefCell;
+use std::cell::{Ref, RefMut, RefCell};
 use std::rc::Rc;
 use std::collections::BTreeSet;
 use std::fmt::Display;
-use std::ops::{Deref, DerefMut};
+use std::mem;
 
 pub struct Node<T> {
     key: T,
@@ -42,9 +41,9 @@ impl<T: PartialOrd + Display> AVLTree<T> {
                 {
                     let mut x = node.as_ref().borrow_mut();
                     if key.lt(&x.key) {
-                        x.left = Self::add_inner(x.left.take().borrow_mut(), key)
+                        x.left = Self::add_inner(&mut x.left.take(), key)
                     } else if x.key.lt(&key) {
-                        x.right = Self::add_inner(x.right.take().borrow_mut(), key)
+                        x.right = Self::add_inner(&mut x.right.take(), key)
                     }
                 }
                 Some(node)
@@ -56,17 +55,23 @@ impl<T: PartialOrd + Display> AVLTree<T> {
     }
 
     pub fn rotate_left(root: &mut Link<T>) -> Link<T> {
-
-        todo!()
+        root.take().map(|x| {
+            let mut rch = x.borrow_mut().right.take().unwrap();
+            let mut rchlch = rch.borrow_mut().left.take().unwrap();
+            x.borrow_mut().right = Some(rchlch);
+            rch.borrow_mut().left = Some(x);
+            rch
+        })
     }
 
     pub fn rotate_right(root: &mut Link<T>) -> Link<T> {
-        let mut x = root.take().unwrap();
-        let mut lch = x.as_ref().borrow_mut().left.take().unwrap();
-        let mut lchrch = lch.as_ref().borrow_mut().right.take().unwrap();
-        x.as_ref().borrow_mut().left = Some(lchrch);
-        lch.as_ref().borrow_mut().right = Some(x);
-        Some(lch)
+        root.take().map(|x| {
+            let mut lch = x.borrow_mut().left.take().unwrap();
+            let mut lchrch = lch.borrow_mut().right.take().unwrap();
+            x.borrow_mut().left = Some(lchrch);
+            lch.borrow_mut().right = Some(x);
+            lch
+        })
     }
 
     pub fn add(&mut self, key: T) {
