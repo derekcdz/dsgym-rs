@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::{Rc, Weak};
 
-type Child<K, V> = Option<Rc<RefCell<Node<K, V>>>>;
-type Parent<K, V> = Option<Weak<RefCell<Node<K, V>>>>;
+type Link<K, V> = Option<Rc<RefCell<Node<K, V>>>>;
+type WeakLink<K, V> = Option<Weak<RefCell<Node<K, V>>>>;
 
 enum Color {
     Red,
@@ -13,14 +13,14 @@ enum Color {
 struct Node<K, V> {
     key: K,
     val: V,
-    left: Child<K, V>,
-    right: Child<K, V>,
-    parent: Parent<K, V>,
+    left: Link<K, V>,
+    right: Link<K, V>,
+    parent: WeakLink<K, V>,
     color: Color,
 }
 
 pub struct RBTreeMap<K, V> {
-    root: Child<K, V>,
+    root: Link<K, V>,
     length: usize,
 }
 
@@ -91,5 +91,10 @@ impl<K, V> RBTreeMap<K, V> {
         K: Ord,
     {
         todo!()
+    }
+
+
+    fn search_node(root: &Link<K, V>) -> Link<K, V> {
+
     }
 }
