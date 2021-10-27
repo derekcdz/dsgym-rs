@@ -40,7 +40,9 @@ impl<T: Ord> AVLTree<T> {
                 {
                     let mut x = node.borrow_mut();
                     match key.cmp(&x.key) {
-                        Ordering::Less => x.left = Self::add_inner(x.left.take(), key),
+                        Ordering::Less => {
+                            x.left = Self::add_inner(x.left.take(), key)
+                        },
                         Ordering::Greater => x.right = Self::add_inner(x.right.take(), key),
                         _ => return None
                     }
@@ -98,40 +100,31 @@ impl<T: Ord> AVLTree<T> {
         node.as_ref().map_or(0, |x| x.borrow().height)
     }
 
+    fn balance_factor(node: &Link<T>) -> i32 {
+        node.as_ref().map_or(0, |x| {
+            let x = x.borrow();
+            Self::tree_height(&x.left) - Self::tree_height(&x.right)
+        })
+    }
+
     fn balance(root: Link<T>) -> Link<T> {
+        let bf = Self::balance_factor(&root);
+        if bf >= -1 && bf <= 1 {
+            return root;
+        }
         if let Some(x) = root {
-            let diff;
-            {
-                let x = x.borrow_mut();
-                diff = Self::tree_height(&x.left) - Self::tree_height(&x.right);
-            }
-            if diff >= -1 && diff <= 1 {
-                return Some(x);
-            }
-            match diff {
+            match bf {
                 -2 => {
-                    let diff2;
-                    {
-                        let y = x.borrow().right.clone().unwrap();
-                        let ly = &y.borrow().left;
-                        let ry = &y.borrow().right;
-                        diff2 = Self::tree_height(ly) - Self::tree_height(ry);
-                    }
-                    if diff2 > 0 {
+                    let sub_bf = Self::balance_factor(&x.borrow().right);
+                    if sub_bf > 0 {
                         let mut x = x.borrow_mut();
                         x.right = Self::rotate_right(x.right.take());
                     }
                     Self::rotate_left(Some(x))
                 }
                 2 => {
-                    let diff2;
-                    {
-                        let y = x.borrow().left.clone().unwrap();
-                        let ly = &y.borrow().left;
-                        let ry = &y.borrow().right;
-                        diff2 = Self::tree_height(ly) - Self::tree_height(ry);
-                    }
-                    if diff2 < 0 {
+                    let sub_bf = Self::balance_factor(&x.borrow().left);
+                    if sub_bf < 0 {
                         let mut x = x.borrow_mut();
                         x.left = Self::rotate_left(x.left.take());
                     }
