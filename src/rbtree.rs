@@ -46,12 +46,20 @@ impl<K, V> RBTreeMap<K, V> {
         todo!()
     }
 
+    /// Returns the key-value pair corresponding to the key
+    pub fn get_key_value(&self, key: &K) -> Option<(&K, &V)>
+    where
+        K: Ord,
+    {
+        todo!()
+    }
+
     /// Returns `true` if the map contains a value for the specified key.
     pub fn contains_key(&self, key: &K) -> bool
     where
         K: Ord,
     {
-        todo!()
+        self.get(key).is_some()
     }
 
     /// Inserts a key-value pair into the map.
