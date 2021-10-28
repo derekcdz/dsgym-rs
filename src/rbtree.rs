@@ -1,9 +1,8 @@
-use std::cell::RefCell;
+use std::cell::{RefCell, Ref, RefMut};
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::rc::{Rc, Weak};
-
-type Link<K, V> = Option<Rc<RefCell<Node<K, V>>>>;
-type WeakLink<K, V> = Option<Weak<RefCell<Node<K, V>>>>;
+use std::cmp::Ordering;
 
 enum Color {
     Red,
@@ -13,23 +12,27 @@ enum Color {
 struct Node<K, V> {
     key: K,
     val: V,
-    left: Link<K, V>,
-    right: Link<K, V>,
-    parent: WeakLink<K, V>,
+    left: Option<usize>,
+    right: Option<usize>,
+    parent: Option<usize>,
     color: Color,
 }
 
 pub struct RBTreeMap<K, V> {
-    root: Link<K, V>,
-    length: usize,
+    nodes: Vec<Rc<Box<Node<K, V>>>>,
+    free: Vec<usize>,
+    size: usize,
+    root: Option<None>
 }
 
 impl<K, V> RBTreeMap<K, V> {
     /// Makes a new, empty `RBTreeMap`.
     pub fn new() -> RBTreeMap<K, V> {
         Self {
+            nodes: Vec::new(),
+            free: Vec::new(),
+            size: 0,
             root: None,
-            length: 0,
         }
     }
 
@@ -39,10 +42,14 @@ impl<K, V> RBTreeMap<K, V> {
     }
 
     /// Returns the value corresponding to the key
-    pub fn get(&self, key: &K) -> Option<&V>
+    pub fn get(&self, key: &K) -> Option<Ref<V>>
     where
         K: Ord,
     {
+        // let node = RBTreeMap::search_node(&self.root, key);
+        // node.map(|node| {
+        //     Ref::map(node.borrow(), |node| &node.val)
+        // })
         todo!()
     }
 
@@ -93,8 +100,49 @@ impl<K, V> RBTreeMap<K, V> {
         todo!()
     }
 
+    fn search_node(&self, key: &K) -> Option<usize>
+    where
+        K: Ord,
+    {
+        let mut cur = &self.root;
+        let mut _;
 
-    fn search_node(root: &Link<K, V>) -> Link<K, V> {
+        while cur.is_some() {
+            let cur_rc = cur.as_ref().unwrap();
+            let cmp =  key.cmp(&cur_rc.borrow().key);
+            match cmp {
+                Ordering::Less => {
+                    (cur, _) = Ref::map_split(cur_rc.borrow(), |x| (&x.left, _));
+                },
+                Ordering::Greater => {
+                    // cur = &Ref::map(cur_rc.borrow(), |x| &x.right);
+                    todo!()
+                },
+                Ordering::Equal => {
+                    todo!()
+                }
+            }
+        }
 
+        todo!()
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+
+    #[test]
+    fn basics() {
+
+    }
+
+    #[test]
+    fn check_builtin() {
+        let mut m = HashMap::new();
+        m.insert("A", "A");
+        m.insert("B", "B");
+        m.get("A");
     }
 }
