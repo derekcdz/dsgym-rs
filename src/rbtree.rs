@@ -17,6 +17,7 @@ enum Direction {
 struct Node<K, V> {
     key: K,
     val: V,
+    index: usize,
     left: Option<usize>,
     right: Option<usize>,
     parent: Option<usize>,
@@ -35,6 +36,7 @@ impl<K, V> Node<K, V> {
         Node {
             key: key,
             val: value,
+            index: 0,
             left: None,
             right: None,
             parent: None,
@@ -116,7 +118,7 @@ impl<K, V> RBTreeMap<K, V> {
                 }
             }
         }
-        match cur {
+        match p {
             Some(index) => {
                 if p == cur {
                     // key already exists
@@ -143,6 +145,7 @@ impl<K, V> RBTreeMap<K, V> {
                     new_node.parent = p;
                     self.push_node(new_node);
                     self.fix_after_insertion(next_index);
+                    self.root_node().color = Color::Black;
                     None
                 }
             }
@@ -194,23 +197,52 @@ impl<K, V> RBTreeMap<K, V> {
         None
     }
 
+    // Returns mutable reference of root node, must insure root exists before called
+    fn root_node(&mut self) -> &mut Box<Node<K, V>> {
+        assert!(self.root.is_some());
+        self.nodes.get_mut(self.root.unwrap()).unwrap()
+    }
+
+    fn rotate_left(&mut self, index: usize) {
+        let mut x = self.fetch_node(index);
+        assert!(x.right.is_some());
+
+        let p = x.parent.map(|index| self.fetch_node(index));
+        let mut y = self.fetch_node(x.right.unwrap());
+        let ly = y.left.map(|index| self.fetch_node(index));
+
+
+
+    }
+
+    fn rotate_right(&mut self, index: usize) {
+
+    }
+
     fn fix_after_insertion(&mut self, index: usize) {
-        todo!()
+    }
+
+    fn fetch_node(&mut self, index: usize) -> &mut Box<Node<K, V>> {
+        self.nodes.get_mut(index).unwrap()
     }
 
     // Pushes a new node to inner node vector and returns index of the node
     fn push_node(&mut self, node: Box<Node<K, V>>) -> usize {
         let free_index = self.free.pop();
+        let new_index;
         match free_index {
             Some(index) => {
+                new_index = index;
+                node.index = new_index;
                 self.nodes.insert(index, node);
-                index
             }
             None => {
+                new_index = self.nodes.len() - 1;
+                node.index = new_index;
                 self.nodes.push(node);
-                self.nodes.len() - 1
             }
         }
+        new_index
     }
 
     // Returns the next index of node if a new node will be pushed to inner vector
@@ -220,21 +252,5 @@ impl<K, V> RBTreeMap<K, V> {
         } else {
             self.nodes.len()
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::collections::HashMap;
-
-    #[test]
-    fn basics() {}
-
-    #[test]
-    fn check_builtin() {
-        let mut m = HashMap::new();
-        m.insert("A", "A");
-        m.insert("B", "B");
-        m.get("A");
     }
 }
