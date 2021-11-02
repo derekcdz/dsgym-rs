@@ -2,8 +2,10 @@ use std::cell::{Ref, RefCell, RefMut};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::mem::swap;
 use std::rc::{Rc, Weak};
 
+#[derive(PartialEq,Eq)]
 enum Color {
     Red,
     Black,
@@ -184,13 +186,11 @@ impl<K, V> RBTreeMap<K, V> {
         while let Some(cur_index) = cur {
             let cur_node = self.nodes.get(cur_index);
             match cur_node {
-                Some(x) => {
-                    match key.cmp(&x.key) {
-                        Ordering::Less => cur = x.left,
-                        Ordering::Greater => cur = x.right,
-                        Ordering::Equal => return cur_node,
-                    }
-                }
+                Some(x) => match key.cmp(&x.key) {
+                    Ordering::Less => cur = x.left,
+                    Ordering::Greater => cur = x.right,
+                    Ordering::Equal => return cur_node,
+                },
                 None => return None,
             }
         }
@@ -198,7 +198,7 @@ impl<K, V> RBTreeMap<K, V> {
     }
 
     // Returns mutable reference of root node, must insure root exists before called
-    fn root_node(&mut self) -> &mut Box<Node<K, V>> {
+    fn root_node(&mut self) -> &mut Node<K, V> {
         assert!(self.root.is_some());
         self.nodes.get_mut(self.root.unwrap()).unwrap()
     }
@@ -211,23 +211,90 @@ impl<K, V> RBTreeMap<K, V> {
         let mut y = self.fetch_node(x.right.unwrap());
         let ly = y.left.map(|index| self.fetch_node(index));
 
+        x.right = y.left;
+        if let Some(ly) = ly {
+            ly.parent = Some(x.index);
+        }
+        y.left = Some(x.index);
+        y.parent = x.parent;
+        x.parent = Some(y.index);
+        swap(&mut x.color, &mut y.color);
 
-
+        if let Some(p) = p {
+            if p.left == Some(x.index) {
+                p.left = Some(y.index);
+            } else {
+                p.right = Some(y.index);
+            }
+        } else {
+            self.root = Some(y.index);
+        }
     }
 
     fn rotate_right(&mut self, index: usize) {
+        let mut x = self.fetch_node(index);
+        assert!(x.left.is_some());
 
+        let p = x.parent.map(|index| self.fetch_node(index));
+        let mut y = self.fetch_node(x.left.unwrap());
+        let ry = y.right.map(|index| self.fetch_node(index));
+
+        x.left = y.right;
+        if let Some(ry) = ry {
+            ry.parent = Some(x.index);
+        }
+        y.right = Some(x.index);
+        y.parent = x.parent;
+        x.parent = Some(y.index);
+        swap(&mut x.color, &mut y.color);
+
+        if let Some(p) = p {
+            if p.left == Some(x.index) {
+                p.left = Some(y.index);
+            } else {
+                p.right = Some(y.index);
+            }
+        } else {
+            self.root = Some(y.index);
+        }
     }
+
 
     fn fix_after_insertion(&mut self, index: usize) {
+        let mut x = Some(self.fetch_node(index));
+
+        while let Some(cur) = x {
+            if self.root.unwrap() == cur.index {
+                break;
+            }
+            let mut p = self.fetch_node(cur.index);
+            if p.color == Color::Red {
+                break;
+            }
+            let mut g = p.parent.map(|index| self.fetch_node(index));
+
+
+            x = g; // FIXME
+        }
+
+        self.root_node().color = Color::Black;
     }
 
-    fn fetch_node(&mut self, index: usize) -> &mut Box<Node<K, V>> {
-        self.nodes.get_mut(index).unwrap()
+
+    // Black magic. Returns a mutable ref of node from the inner node vector according to the index.
+    //
+    // # Safety
+    // `index` must not exceed the inner vector's size.
+    fn fetch_node(&self, index: usize) -> &mut Node<K, V> {
+        let raw: *const _ = &self.nodes.get(index).unwrap();
+        unsafe {
+            let mut raw: *mut _ = std::mem::transmute(raw);
+            return &mut *raw;
+        }
     }
 
     // Pushes a new node to inner node vector and returns index of the node
-    fn push_node(&mut self, node: Box<Node<K, V>>) -> usize {
+    fn push_node(&mut self, mut node: Box<Node<K, V>>) -> usize {
         let free_index = self.free.pop();
         let new_index;
         match free_index {
@@ -237,7 +304,7 @@ impl<K, V> RBTreeMap<K, V> {
                 self.nodes.insert(index, node);
             }
             None => {
-                new_index = self.nodes.len() - 1;
+                new_index = self.nodes.len();
                 node.index = new_index;
                 self.nodes.push(node);
             }
