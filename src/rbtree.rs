@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::fmt::Display;
-use std::mem::swap;
+use std::mem::{replace, swap};
 use std::ptr;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -46,6 +46,12 @@ impl<K, V> Node<K, V> {
             color: color,
         }))
         // use unsafe { Box::from_raw(node); } to destruct a Node
+    }
+
+    unsafe fn free_node(node: *mut Node<K, V>) {
+        if !node.is_null() {
+            Box::from_raw(node);
+        }
     }
 
     unsafe fn left_of(node: *mut Node<K, V>) -> *mut Node<K, V> {
@@ -203,18 +209,81 @@ impl<'a, K, V> RBTreeMap<K, V> {
     /// was previously in the map.
     pub fn remove(&mut self, key: &K) -> Option<V>
     where
-        K: Ord,
+        K: Ord + Default,
+        V: Default,
     {
-        todo!()
+        self.remove_entry(key).map(|e| e.1)
     }
 
     /// Removes a key from the map, returning the stored key and value if the key
     /// was previously in the map.
     pub fn remove_entry(&mut self, key: &K) -> Option<(K, V)>
     where
-        K: Ord,
+        K: Ord + Default,
+        V: Default,
     {
-        todo!()
+        unsafe {
+            let mut x = self.search_node(key);
+            if x.is_null() {
+                return None;
+            }
+            self.size -= 1;
+            let result = Some((
+                replace(&mut (*x).key, Default::default()),
+                replace(&mut (*x).value, Default::default()),
+            )); // can we move key and value out of Node without Default::default()?
+
+            if !(*x).left.is_null() && !(*x).right.is_null() {
+                let mut y = (*x).right;
+                while !(*y).left.is_null() {
+                    y = (*y).left;
+                }
+                swap(&mut (*x).key, &mut (*y).key);
+                swap(&mut (*x).value, &mut (*y).value);
+                x = y;
+            }
+
+            if !(*x).left.is_null() || (*x).right.is_null() {
+                // x has only 1 child: replace and return
+                let mut replacement = (*x).left;
+                if (*x).left.is_null() {
+                    replacement = (*x).right;
+                }
+
+                let p = (*x).parent;
+                if !p.is_null() {
+                    (*replacement).parent = p;
+                    if x == Node::left_of(p) {
+                        (*p).left = replacement;
+                    } else {
+                        (*p).right = replacement;
+                    }
+                } else {
+                    (*replacement).parent = ptr::null_mut();
+                    self.root = replacement;
+                    Node::set_color(replacement, Color::Black);
+                }
+                Node::free_node(x);
+            } else {
+                // x is leaf: remove and fix
+                if !Node::is_red(x) {
+                    self.fix_after_deletion(x);
+                }
+
+                let p = (*x).parent;
+                if !p.is_null() {
+                    if x == Node::left_of(p) {
+                        (*p).left = ptr::null_mut();
+                    } else {
+                        (*p).right = ptr::null_mut();
+                    }
+                } else {
+                    self.root = ptr::null_mut();
+                }
+                Node::free_node(x);
+            }
+            result
+        }
     }
 
     pub fn iter(&'a self) -> Iter<'a, K, V> {
@@ -377,6 +446,10 @@ impl<'a, K, V> RBTreeMap<K, V> {
             }
         }
         Node::set_color(self.root, Color::Black);
+    }
+
+    unsafe fn fix_after_deletion(&mut self, node: *mut Node<K, V>) {
+        unimplemented!()
     }
 }
 
