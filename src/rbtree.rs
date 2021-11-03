@@ -1,8 +1,9 @@
 use std::cmp::Ordering;
+use std::fmt::Display;
 use std::mem::swap;
 use std::ptr;
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum Color {
     Red,
     Black,
@@ -13,6 +14,7 @@ enum Direction {
     Right,
 }
 
+#[derive(Debug)]
 struct Node<K, V> {
     key: K,
     value: V,
@@ -26,6 +28,11 @@ pub struct RBTreeMap<K, V> {
     size: usize,
     root: *mut Node<K, V>,
 }
+
+/// An iterator over the entries of a RBTreeMap.
+// pub struct Iter<'a, K: 'a, V: 'a> {
+//     base: base::Iter<'a, K, V>,
+// }
 
 impl<K, V> Node<K, V> {
     pub fn new(key: K, value: V, color: Color) -> *mut Node<K, V> {
@@ -84,7 +91,7 @@ impl<K, V> RBTreeMap<K, V> {
         }
     }
 
-    pub fn size(&self) -> usize {
+    pub fn len(&self) -> usize {
         return self.size;
     }
 
@@ -226,6 +233,9 @@ impl<K, V> RBTreeMap<K, V> {
         ptr::null_mut()
     }
 
+    // Assumes node and its right child are not null
+    // Rotation here exchanges their colors.
+    // When node.right is red, it will not violate rules of Red-Black tree.
     unsafe fn rotate_left(&mut self, node: *mut Node<K, V>) {
         if node.is_null() {
             return;
@@ -257,6 +267,9 @@ impl<K, V> RBTreeMap<K, V> {
         }
     }
 
+    // Assumes node and its left child are not null
+    // Rotation here exchanges their colors.
+    // When node.left is red, it will not violate rules of Red-Black tree.
     unsafe fn rotate_right(&mut self, node: *mut Node<K, V>) {
         if node.is_null() {
             return;
@@ -300,12 +313,12 @@ impl<K, V> RBTreeMap<K, V> {
             let g = Node::parent_of(p);
 
             if p == Node::left_of(g) {
-                ///      g
-                ///     / \
-                ///    p  u
-                ///    |
-                ///    x
-                /// u and g may be NULL
+                //      g
+                //     / \
+                //    p  u
+                //    |
+                //    x
+                // u and g may be null
                 let mut u = Node::right_of(g);
                 if Node::is_red(u) {
                     Node::set_color(p, Color::Black);
@@ -313,20 +326,20 @@ impl<K, V> RBTreeMap<K, V> {
                     Node::set_color(g, Color::Red);
                     x = g;
                 } else {
-                    ///      g             g
-                    ///     / \           / \
-                    ///    p  u          x  u
-                    ///     \           /
-                    ///     x    ==>   p
+                    //      g             g
+                    //     / \           / \
+                    //    p  u          x  u
+                    //     \           /
+                    //     x    ==>   p
                     if x == Node::right_of(p) {
                         self.rotate_left(p);
                         x = p;
                     }
-                    ///      g             p
-                    ///     / \           / \
-                    ///    p  u          x  g
-                    ///   /                  \
-                    ///  x       ==>         u
+                    //      g             p
+                    //     / \           / \
+                    //    p  u          x  g
+                    //   /                  \
+                    //  x       ==>         u
                     self.rotate_right(g);
                 }
             } else {
@@ -348,4 +361,30 @@ impl<K, V> RBTreeMap<K, V> {
         }
         Node::set_color(self.root, Color::Black);
     }
+}
+
+impl<K, V> Drop for RBTreeMap<K, V> {
+    fn drop(&mut self) {
+        // Uses a stack to record pointers of nodes to be freed.
+        // Prevent invoking Node::drop() recursively.
+        unsafe {
+            let mut stack = Vec::new();
+            if !self.root.is_null() {
+                stack.push(self.root);
+            }
+            while let Some(ptr) = stack.pop() {
+                if !(*ptr).left.is_null() {
+                    stack.push((*ptr).left);
+                }
+                if !(*ptr).right.is_null() {
+                    stack.push((*ptr).right);
+                }
+                Box::from_raw(ptr);
+            }
+        }
+    }
+}
+
+impl<K, V> Drop for Node<K, V> {
+    fn drop(&mut self) {}
 }
