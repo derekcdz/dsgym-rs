@@ -1,11 +1,8 @@
-use std::cell::{Ref, RefCell, RefMut};
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
 use std::mem::swap;
-use std::rc::{Rc, Weak};
+use std::ptr;
 
-#[derive(PartialEq,Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 enum Color {
     Red,
     Black,
@@ -18,32 +15,63 @@ enum Direction {
 
 struct Node<K, V> {
     key: K,
-    val: V,
-    index: usize,
-    left: Option<usize>,
-    right: Option<usize>,
-    parent: Option<usize>,
+    value: V,
+    left: *mut Node<K, V>,
+    right: *mut Node<K, V>,
+    parent: *mut Node<K, V>,
     color: Color,
 }
 
 pub struct RBTreeMap<K, V> {
-    nodes: Vec<Box<Node<K, V>>>,
-    free: Vec<usize>,
     size: usize,
-    root: Option<usize>,
+    root: *mut Node<K, V>,
 }
 
 impl<K, V> Node<K, V> {
-    pub fn new(key: K, value: V, color: Color) -> Node<K, V> {
-        Node {
+    pub fn new(key: K, value: V, color: Color) -> *mut Node<K, V> {
+        Box::into_raw(Box::new(Node {
             key: key,
-            val: value,
-            index: 0,
-            left: None,
-            right: None,
-            parent: None,
+            value: value,
+            left: ptr::null_mut(),
+            right: ptr::null_mut(),
+            parent: ptr::null_mut(),
             color: color,
+        }))
+        // use unsafe { Box::from_raw(node); } to destruct a Node
+    }
+
+    unsafe fn left_of(node: *mut Node<K, V>) -> *mut Node<K, V> {
+        if !node.is_null() {
+            (*node).left
+        } else {
+            ptr::null_mut()
         }
+    }
+
+    unsafe fn right_of(node: *mut Node<K, V>) -> *mut Node<K, V> {
+        if !node.is_null() {
+            (*node).right
+        } else {
+            ptr::null_mut()
+        }
+    }
+
+    unsafe fn parent_of(node: *mut Node<K, V>) -> *mut Node<K, V> {
+        if !node.is_null() {
+            (*node).parent
+        } else {
+            ptr::null_mut()
+        }
+    }
+
+    unsafe fn set_color(node: *mut Node<K, V>, color: Color) {
+        if !node.is_null() {
+            (*node).color = color;
+        }
+    }
+
+    unsafe fn is_red(node: *mut Node<K, V>) -> bool {
+        !node.is_null() && (*node).color == Color::Red
     }
 }
 
@@ -51,14 +79,16 @@ impl<K, V> RBTreeMap<K, V> {
     /// Makes a new, empty `RBTreeMap`.
     pub fn new() -> RBTreeMap<K, V> {
         Self {
-            nodes: Vec::new(),
-            free: Vec::new(),
             size: 0,
-            root: None,
+            root: ptr::null_mut(),
         }
     }
 
-    /// Clears the map
+    pub fn size(&self) -> usize {
+        return self.size;
+    }
+
+    /// Clears the map, removing all elements from the map
     pub fn clear(&mut self) {
         *self = RBTreeMap::new();
     }
@@ -68,18 +98,30 @@ impl<K, V> RBTreeMap<K, V> {
     where
         K: Ord,
     {
-        let node = self.search_node(key);
-        node.map(|x| &x.val)
+        unsafe {
+            let node = self.search_node(key);
+            if !node.is_null() {
+                Some(&(*node).value)
+            } else {
+                None
+            }
+        }
     }
 
-    // /// Returns the key-value pair corresponding to the key
-    // pub fn get_key_value(&self, key: &K) -> Option<(&K, &V)>
-    // where
-    //     K: Ord,
-    // {
-    //     let node = self.search_node(key);
-    //     node.map(|x| (&x.borrow().key, &x.borrow().val))
-    // }
+    /// Returns the key-value pair corresponding to the key
+    pub fn get_key_value(&self, key: &K) -> Option<(&K, &V)>
+    where
+        K: Ord,
+    {
+        let node = self.search_node(key);
+        unsafe {
+            if !node.is_null() {
+                return Some((&(*node).key, &(*node).value));
+            } else {
+                return None;
+            }
+        }
+    }
 
     /// Returns `true` if the map contains a value for the specified key.
     pub fn contains_key(&self, key: &K) -> bool
@@ -100,60 +142,50 @@ impl<K, V> RBTreeMap<K, V> {
         K: Ord,
     {
         let mut cur = self.root;
-        let mut p = None;
+        let mut p = ptr::null_mut();
         let mut dir = Direction::Left;
 
-        while let Some(cur_index) = cur {
-            p = cur;
-            let x = self.nodes.get(cur_index).unwrap();
-            match key.cmp(&x.key) {
-                Ordering::Less => {
-                    cur = x.left;
-                    dir = Direction::Left;
-                }
-                Ordering::Greater => {
-                    cur = x.right;
-                    dir = Direction::Right;
-                }
-                Ordering::Equal => {
-                    break;
+        unsafe {
+            while !cur.is_null() {
+                p = cur;
+                match key.cmp(&(*cur).key) {
+                    Ordering::Less => {
+                        cur = (*cur).left;
+                        dir = Direction::Left;
+                    }
+                    Ordering::Greater => {
+                        cur = (*cur).right;
+                        dir = Direction::Right;
+                    }
+                    Ordering::Equal => {
+                        break;
+                    }
                 }
             }
-        }
-        match p {
-            Some(index) => {
+            if !p.is_null() {
                 if p == cur {
                     // key already exists
-                    let mut existing = self
-                        .nodes
-                        .get_mut(index)
-                        .expect("Invalid index to nodes vector");
-                    let mut old_value = value;
-                    std::mem::swap(&mut old_value, &mut existing.val); // because V is not Copy
+                    let mut old_value = std::mem::replace(&mut (*cur).value, value);
 
                     Some(old_value) // old value is returned
                 } else {
                     // new node inserting
-                    let next_index = self.next_index();
-                    let mut parent_node = self
-                        .nodes
-                        .get_mut(p.unwrap())
-                        .expect("Invalid index to nodes vector");
+                    let mut new_node = Node::new(key, value, Color::Red);
                     match dir {
-                        Direction::Left => parent_node.left = Some(next_index),
-                        Direction::Right => parent_node.right = Some(next_index),
+                        Direction::Left => (*p).left = new_node,
+                        Direction::Right => (*p).right = new_node,
                     }
-                    let mut new_node = Box::new(Node::new(key, value, Color::Red));
-                    new_node.parent = p;
-                    self.push_node(new_node);
-                    self.fix_after_insertion(next_index);
-                    self.root_node().color = Color::Black;
+                    (*new_node).parent = p;
+                    self.fix_after_insertion(new_node);
+                    Node::set_color(self.root, Color::Black);
+                    self.size += 1;
                     None
                 }
-            }
-            None => {
+            } else {
                 // empty tree case, set new root
-                self.root = Some(self.push_node(Box::new(Node::new(key, value, Color::Black))));
+                self.root = Node::new(key, value, Color::Black);
+                self.size = 1;
+
                 None
             }
         }
@@ -177,147 +209,143 @@ impl<K, V> RBTreeMap<K, V> {
         todo!()
     }
 
-    fn search_node(&self, key: &K) -> Option<&Box<Node<K, V>>>
+    fn search_node(&self, key: &K) -> *mut Node<K, V>
     where
         K: Ord,
     {
         let mut cur = self.root;
-
-        while let Some(cur_index) = cur {
-            let cur_node = self.nodes.get(cur_index);
-            match cur_node {
-                Some(x) => match key.cmp(&x.key) {
-                    Ordering::Less => cur = x.left,
-                    Ordering::Greater => cur = x.right,
-                    Ordering::Equal => return cur_node,
-                },
-                None => return None,
-            }
-        }
-        None
-    }
-
-    // Returns mutable reference of root node, must insure root exists before called
-    fn root_node(&mut self) -> &mut Node<K, V> {
-        assert!(self.root.is_some());
-        self.nodes.get_mut(self.root.unwrap()).unwrap()
-    }
-
-    fn rotate_left(&mut self, index: usize) {
-        let mut x = self.fetch_node(index);
-        assert!(x.right.is_some());
-
-        let p = x.parent.map(|index| self.fetch_node(index));
-        let mut y = self.fetch_node(x.right.unwrap());
-        let ly = y.left.map(|index| self.fetch_node(index));
-
-        x.right = y.left;
-        if let Some(ly) = ly {
-            ly.parent = Some(x.index);
-        }
-        y.left = Some(x.index);
-        y.parent = x.parent;
-        x.parent = Some(y.index);
-        swap(&mut x.color, &mut y.color);
-
-        if let Some(p) = p {
-            if p.left == Some(x.index) {
-                p.left = Some(y.index);
-            } else {
-                p.right = Some(y.index);
-            }
-        } else {
-            self.root = Some(y.index);
-        }
-    }
-
-    fn rotate_right(&mut self, index: usize) {
-        let mut x = self.fetch_node(index);
-        assert!(x.left.is_some());
-
-        let p = x.parent.map(|index| self.fetch_node(index));
-        let mut y = self.fetch_node(x.left.unwrap());
-        let ry = y.right.map(|index| self.fetch_node(index));
-
-        x.left = y.right;
-        if let Some(ry) = ry {
-            ry.parent = Some(x.index);
-        }
-        y.right = Some(x.index);
-        y.parent = x.parent;
-        x.parent = Some(y.index);
-        swap(&mut x.color, &mut y.color);
-
-        if let Some(p) = p {
-            if p.left == Some(x.index) {
-                p.left = Some(y.index);
-            } else {
-                p.right = Some(y.index);
-            }
-        } else {
-            self.root = Some(y.index);
-        }
-    }
-
-
-    fn fix_after_insertion(&mut self, index: usize) {
-        let mut x = Some(self.fetch_node(index));
-
-        while let Some(cur) = x {
-            if self.root.unwrap() == cur.index {
-                break;
-            }
-            let mut p = self.fetch_node(cur.index);
-            if p.color == Color::Red {
-                break;
-            }
-            let mut g = p.parent.map(|index| self.fetch_node(index));
-
-
-            x = g; // FIXME
-        }
-
-        self.root_node().color = Color::Black;
-    }
-
-
-    // Black magic. Returns a mutable ref of node from the inner node vector according to the index.
-    //
-    // # Safety
-    // `index` must not exceed the inner vector's size.
-    fn fetch_node(&self, index: usize) -> &mut Node<K, V> {
-        let raw: *const _ = &self.nodes.get(index).unwrap();
         unsafe {
-            let mut raw: *mut _ = std::mem::transmute(raw);
-            return &mut *raw;
-        }
-    }
-
-    // Pushes a new node to inner node vector and returns index of the node
-    fn push_node(&mut self, mut node: Box<Node<K, V>>) -> usize {
-        let free_index = self.free.pop();
-        let new_index;
-        match free_index {
-            Some(index) => {
-                new_index = index;
-                node.index = new_index;
-                self.nodes.insert(index, node);
-            }
-            None => {
-                new_index = self.nodes.len();
-                node.index = new_index;
-                self.nodes.push(node);
+            while !cur.is_null() {
+                match key.cmp(&(*cur).key) {
+                    Ordering::Less => cur = (*cur).left,
+                    Ordering::Greater => cur = (*cur).right,
+                    Ordering::Equal => return cur,
+                }
             }
         }
-        new_index
+        ptr::null_mut()
     }
 
-    // Returns the next index of node if a new node will be pushed to inner vector
-    fn next_index(&self) -> usize {
-        if !self.free.is_empty() {
-            *self.free.last().unwrap()
+    unsafe fn rotate_left(&mut self, node: *mut Node<K, V>) {
+        if node.is_null() {
+            return;
+        }
+        let x = node;
+        let y = Node::right_of(x);
+        assert!(!y.is_null());
+
+        let p = (*x).parent;
+        let ly = Node::left_of(y);
+
+        (*x).right = ly;
+        if !ly.is_null() {
+            (*ly).parent = x;
+        }
+        (*y).left = x;
+        (*y).parent = (*x).parent;
+        (*x).parent = y;
+        swap(&mut (*x).color, &mut (*y).color);
+
+        if !p.is_null() {
+            if (*p).left == x {
+                (*p).left = y;
+            } else {
+                (*p).right = y;
+            }
         } else {
-            self.nodes.len()
+            self.root = y;
         }
+    }
+
+    unsafe fn rotate_right(&mut self, node: *mut Node<K, V>) {
+        if node.is_null() {
+            return;
+        }
+        let x = node;
+        let y = Node::left_of(x);
+        assert!(!y.is_null());
+
+        let p = (*x).parent;
+        let ry = Node::right_of(y);
+
+        (*x).left = ry;
+        if !ry.is_null() {
+            (*ry).parent = x;
+        }
+        (*y).right = x;
+        (*y).parent = (*x).parent;
+        (*x).parent = y;
+        swap(&mut (*x).color, &mut (*y).color);
+
+        if !p.is_null() {
+            if (*p).left == x {
+                (*p).left = y;
+            } else {
+                (*p).right = y;
+            }
+        } else {
+            self.root = y;
+        }
+    }
+
+    unsafe fn fix_after_insertion(&mut self, node: *mut Node<K, V>) {
+        if node.is_null() {
+            return;
+        }
+        let mut x = node;
+        Node::set_color(x, Color::Red);
+
+        while !x.is_null() && self.root != x && (*Node::parent_of(x)).color == Color::Red {
+            let p = Node::parent_of(x);
+            let g = Node::parent_of(p);
+
+            if p == Node::left_of(g) {
+                ///      g
+                ///     / \
+                ///    p  u
+                ///    |
+                ///    x
+                /// u and g may be NULL
+                let mut u = Node::right_of(g);
+                if Node::is_red(u) {
+                    Node::set_color(p, Color::Black);
+                    Node::set_color(u, Color::Black);
+                    Node::set_color(g, Color::Red);
+                    x = g;
+                } else {
+                    ///      g             g
+                    ///     / \           / \
+                    ///    p  u          x  u
+                    ///     \           /
+                    ///     x    ==>   p
+                    if x == Node::right_of(p) {
+                        self.rotate_left(p);
+                        x = p;
+                    }
+                    ///      g             p
+                    ///     / \           / \
+                    ///    p  u          x  g
+                    ///   /                  \
+                    ///  x       ==>         u
+                    self.rotate_right(g);
+                }
+            } else {
+                // Symmetric case
+                let mut u = Node::left_of(g);
+                if Node::is_red(u) {
+                    Node::set_color(p, Color::Black);
+                    Node::set_color(u, Color::Black);
+                    Node::set_color(g, Color::Red);
+                    x = g;
+                } else {
+                    if x == Node::left_of(p) {
+                        self.rotate_right(p);
+                        x = p;
+                    }
+                    self.rotate_left(g);
+                }
+            }
+        }
+        Node::set_color(self.root, Color::Black);
     }
 }
