@@ -235,34 +235,38 @@ impl<'a, K, V> RBTreeMap<K, V> {
 
             if !(*x).left.is_null() && !(*x).right.is_null() {
                 let mut y = (*x).right;
+                // find y, the successor of z
                 while !(*y).left.is_null() {
                     y = (*y).left;
                 }
+                // copy data of y to x and then to remove the successor
                 swap(&mut (*x).key, &mut (*y).key);
                 swap(&mut (*x).value, &mut (*y).value);
                 x = y;
             }
 
-            if !(*x).left.is_null() || (*x).right.is_null() {
+            if !(*x).left.is_null() || !(*x).right.is_null() {
                 // x has only 1 child: replace and return
+                // in this case, replacement must be red
                 let mut replacement = (*x).left;
                 if (*x).left.is_null() {
                     replacement = (*x).right;
                 }
 
                 let p = (*x).parent;
+
+                (*replacement).parent = p;
                 if !p.is_null() {
-                    (*replacement).parent = p;
                     if x == Node::left_of(p) {
                         (*p).left = replacement;
                     } else {
                         (*p).right = replacement;
                     }
                 } else {
-                    (*replacement).parent = ptr::null_mut();
                     self.root = replacement;
-                    Node::set_color(replacement, Color::Black);
                 }
+
+                Node::set_color(replacement, Color::Black);
                 Node::free_node(x);
             } else {
                 // x is leaf: remove and fix
