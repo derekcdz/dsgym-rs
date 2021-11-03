@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, BTreeMap};
 use dsgym_rs::rbtree::RBTreeMap;
 
 extern crate quickcheck;
@@ -20,6 +20,19 @@ fn basics() {
     assert_eq!(map.contains_key(&"ZZZ"), false);
 }
 
+#[test]
+fn iter() {
+    let mut map = RBTreeMap::new();
+    map.insert("D", 1);
+    map.insert("C", 2);
+    map.insert("B", 3);
+    map.insert("A", 4);
+
+    for (k, v) in map.iter() {
+        println!("{} {}", k, v);
+    }
+}
+
 #[quickcheck]
 fn size_is_set_properly(v: Vec<i32>) -> bool {
     let mut hashmap = HashMap::new();
@@ -30,4 +43,31 @@ fn size_is_set_properly(v: Vec<i32>) -> bool {
         hashmap.insert(x, x);
     }
     hashmap.len() == map.len()
+}
+
+#[quickcheck]
+fn sorted_like_btreemap(v: Vec<i32>) -> bool {
+    let mut btmap = BTreeMap::new();
+    let mut rbtmap = RBTreeMap::new();
+
+    for x in v.iter() {
+        btmap.insert(x, x);
+        rbtmap.insert(x, x);
+    }
+
+    let mut rbtit = rbtmap.iter();
+    for (k1, v1) in btmap.iter() {
+        let x = rbtit.next();
+        if let Some((k2, v2)) = x {
+            if k1 != k2 || v1 != v2 {
+                return false;
+            }
+            continue;
+        }
+        return false;
+    }
+    if rbtit.next().is_some() {
+        return false;
+    }
+    true
 }

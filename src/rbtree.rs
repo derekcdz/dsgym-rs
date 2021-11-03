@@ -29,10 +29,11 @@ pub struct RBTreeMap<K, V> {
     root: *mut Node<K, V>,
 }
 
-/// An iterator over the entries of a RBTreeMap.
-// pub struct Iter<'a, K: 'a, V: 'a> {
-//     base: base::Iter<'a, K, V>,
-// }
+// An iterator over the entries of a RBTreeMap.
+pub struct Iter<'a, K: 'a, V: 'a> {
+    stack: Vec<*mut Node<K, V>>,
+    phantom: *mut &'a Node<K, V>,
+}
 
 impl<K, V> Node<K, V> {
     pub fn new(key: K, value: V, color: Color) -> *mut Node<K, V> {
@@ -82,7 +83,7 @@ impl<K, V> Node<K, V> {
     }
 }
 
-impl<K, V> RBTreeMap<K, V> {
+impl<'a, K, V> RBTreeMap<K, V> {
     /// Makes a new, empty `RBTreeMap`.
     pub fn new() -> RBTreeMap<K, V> {
         Self {
@@ -214,6 +215,22 @@ impl<K, V> RBTreeMap<K, V> {
         K: Ord,
     {
         todo!()
+    }
+
+    pub fn iter(&'a self) -> Iter<'a, K, V> {
+        let mut stack = Vec::new();
+        let mut x = self.root;
+        while !x.is_null() {
+            stack.push(x);
+            unsafe {
+                x = (*x).left;
+            }
+        }
+
+        Iter {
+            stack,
+            phantom: ptr::null_mut(),
+        }
     }
 
     fn search_node(&self, key: &K) -> *mut Node<K, V>
@@ -360,6 +377,29 @@ impl<K, V> RBTreeMap<K, V> {
             }
         }
         Node::set_color(self.root, Color::Black);
+    }
+}
+
+impl<'a, K, V> Iterator for Iter<'a, K, V> {
+    type Item = (&'a K, &'a V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe {
+            let node = self.stack.pop();
+            if node.is_none() {
+                return None;
+            }
+            let mut x = node.unwrap();
+            if !(*x).right.is_null() {
+                x = (*x).right;
+                self.stack.push(x);
+                while !(*x).left.is_null() {
+                    x = (*x).left;
+                    self.stack.push(x);
+                }
+            }
+            node.map(|node| (&(*node).key, &(*node).value))
+        }
     }
 }
 
