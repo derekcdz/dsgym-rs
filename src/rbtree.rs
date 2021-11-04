@@ -286,6 +286,7 @@ impl<'a, K, V> RBTreeMap<K, V> {
                 }
                 Node::free_node(x);
             }
+            Node::set_color(self.root, Color::Black);
             result
         }
     }
@@ -453,7 +454,88 @@ impl<'a, K, V> RBTreeMap<K, V> {
     }
 
     unsafe fn fix_after_deletion(&mut self, node: *mut Node<K, V>) {
-        unimplemented!()
+        let mut x = node;
+
+        while !x.is_null() && !Node::is_red(x) {
+            let p = Node::parent_of(x);
+            if x == Node::left_of(p) {
+                let mut y = Node::right_of(p);
+                let ly = Node::left_of(y);
+                let ry = Node::right_of(y);
+
+                // children of sibling are both red, flip sibling's color
+                if Node::is_red(ly) && Node::is_red(ry) {
+                    Node::set_color(ly, Color::Black);
+                    Node::set_color(ry, Color::Black);
+                    Node::set_color(y, Color::Red);
+                }
+
+                // sibling is red, take 1 red link from sibling and set it black
+                if Node::is_red(y) {
+                    self.rotate_left(p);
+                    Node::set_color(Node::right_of(p), Color::Red);
+                    x = p;
+                    break;
+                } else {
+                    if Node::is_red(ly) {
+                        self.rotate_right(y);
+                        y = ly;
+                    }
+                    // don't use ly or ry below
+                    // one of sibling's children is red, take this link
+                    if Node::is_red(Node::right_of(y)) {
+                        self.rotate_left(p);
+                        Node::set_color(Node::right_of(y), Color::Black);
+                        break;
+                    } else {
+                        // no red links to take, subtract 1 black depth from sibling,
+                        // try to increase black depth of parent node in next iteration
+                        Node::set_color(y, Color::Red);
+                        x = p;
+                    }
+                }
+            } else {
+                // symmetric case: x is right child of p
+                let mut y = Node::left_of(p);
+                let ly = Node::left_of(y);
+                let ry = Node::right_of(y);
+
+                // children of sibling are both red, flip sibling's color
+                if Node::is_red(ly) && Node::is_red(ry) {
+                    Node::set_color(ly, Color::Black);
+                    Node::set_color(ry, Color::Black);
+                    Node::set_color(y, Color::Red);
+                }
+
+                // sibling is red, take 1 red link from sibling and set it black
+                if Node::is_red(y) {
+                    self.rotate_right(p);
+                    Node::set_color(Node::left_of(p), Color::Red);
+                    x = p;
+                    break;
+                } else {
+                    if Node::is_red(ry) {
+                        self.rotate_left(y);
+                        y = ly;
+                    }
+                    // don't use ly or ry below
+                    // one of sibling's children is red, take this link
+                    if Node::is_red(Node::left_of(y)) {
+                        self.rotate_right(p);
+                        Node::set_color(Node::left_of(y), Color::Black);
+                        break;
+                    } else {
+                        // no red links to take, subtract 1 black depth from sibling,
+                        // try to increase black depth of parent node in next iteration
+                        Node::set_color(y, Color::Red);
+                        x = p;
+                    }
+                }
+
+            }
+        }
+
+        Node::set_color(x, Color::Black);
     }
 }
 
