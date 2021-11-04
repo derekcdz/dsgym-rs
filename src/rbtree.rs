@@ -456,86 +456,81 @@ impl<'a, K, V> RBTreeMap<K, V> {
     unsafe fn fix_after_deletion(&mut self, node: *mut Node<K, V>) {
         let mut x = node;
 
-        while !x.is_null() && !Node::is_red(x) {
+        while x != self.root && !Node::is_red(x) {
             let p = Node::parent_of(x);
             if x == Node::left_of(p) {
                 let mut y = Node::right_of(p);
-                let ly = Node::left_of(y);
-                let ry = Node::right_of(y);
 
-                // children of sibling are both red, flip sibling's color
-                if Node::is_red(ly) && Node::is_red(ry) {
-                    Node::set_color(ly, Color::Black);
-                    Node::set_color(ry, Color::Black);
-                    Node::set_color(y, Color::Red);
-                }
-
-                // sibling is red, take 1 red link from sibling and set it black
                 if Node::is_red(y) {
                     self.rotate_left(p);
-                    Node::set_color(Node::right_of(p), Color::Red);
+                    y = Node::right_of(p);
+                }
+
+                if !Node::is_red(Node::left_of(y)) && !Node::is_red(Node::right_of(y)) {
+                    // no red links to take, subtract 1 black depth from sibling,
+                    // try to increase black depth of parent node in next iteration
+                    Node::set_color(y, Color::Red);
                     x = p;
-                    break;
                 } else {
-                    if Node::is_red(ly) {
+                    // at least one of sibling's children is red, take this link
+                    if Node::is_red(Node::left_of(y)) {
                         self.rotate_right(y);
-                        y = ly;
+                        y = Node::parent_of(y);
                     }
-                    // don't use ly or ry below
-                    // one of sibling's children is red, take this link
-                    if Node::is_red(Node::right_of(y)) {
-                        self.rotate_left(p);
-                        Node::set_color(Node::right_of(y), Color::Black);
-                        break;
-                    } else {
-                        // no red links to take, subtract 1 black depth from sibling,
-                        // try to increase black depth of parent node in next iteration
-                        Node::set_color(y, Color::Red);
-                        x = p;
-                    }
+                    self.rotate_left(p);
+                    Node::set_color(Node::right_of(y), Color::Black);
+                    x = self.root;
                 }
             } else {
                 // symmetric case: x is right child of p
                 let mut y = Node::left_of(p);
-                let ly = Node::left_of(y);
-                let ry = Node::right_of(y);
-
-                // children of sibling are both red, flip sibling's color
-                if Node::is_red(ly) && Node::is_red(ry) {
-                    Node::set_color(ly, Color::Black);
-                    Node::set_color(ry, Color::Black);
-                    Node::set_color(y, Color::Red);
-                }
-
-                // sibling is red, take 1 red link from sibling and set it black
                 if Node::is_red(y) {
                     self.rotate_right(p);
-                    Node::set_color(Node::left_of(p), Color::Red);
-                    x = p;
-                    break;
-                } else {
-                    if Node::is_red(ry) {
-                        self.rotate_left(y);
-                        y = ly;
-                    }
-                    // don't use ly or ry below
-                    // one of sibling's children is red, take this link
-                    if Node::is_red(Node::left_of(y)) {
-                        self.rotate_right(p);
-                        Node::set_color(Node::left_of(y), Color::Black);
-                        break;
-                    } else {
-                        // no red links to take, subtract 1 black depth from sibling,
-                        // try to increase black depth of parent node in next iteration
-                        Node::set_color(y, Color::Red);
-                        x = p;
-                    }
+                    y = Node::left_of(p);
                 }
 
+                if !Node::is_red(Node::left_of(y)) && !Node::is_red(Node::right_of(y)) {
+                    // no red links to take, subtract 1 black depth from sibling,
+                    // try to increase black depth of parent node in next iteration
+                    Node::set_color(y, Color::Red);
+                    x = p;
+                } else {
+                    // at least one of sibling's children is red, take this link
+                    if Node::is_red(Node::right_of(y)) {
+                        self.rotate_left(y);
+                        y = Node::parent_of(y);
+                    }
+                    self.rotate_right(p);
+                    Node::set_color(Node::left_of(y), Color::Black);
+                    x = self.root;
+                }
             }
         }
 
         Node::set_color(x, Color::Black);
+    }
+
+    /// check if a tree rooted at node is a 2-3-4 tree,
+    /// when it's 2-3-4 tree, returns the black height of root,
+    /// when it's not, returns `None`
+    fn is_234tree(node: *mut Node<K, V>) -> Option<usize> {
+        if node.is_null() {
+            return Some(0);
+        }
+        unsafe {
+            let bh_left = Self::is_234tree((*node).left);
+            let bh_right = Self::is_234tree((*node).right);
+            if bh_left.is_none() || bh_right.is_none() {
+                return None;
+            } else if bh_left.unwrap() != bh_right.unwrap() {
+                return None;
+            }
+            if Node::is_red(node) {
+                return bh_left;
+            } else {
+                return Some(bh_left.unwrap() + 1);
+            }
+        }
     }
 }
 
@@ -586,4 +581,45 @@ impl<K, V> Drop for RBTreeMap<K, V> {
 
 impl<K, V> Drop for Node<K, V> {
     fn drop(&mut self) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RBTreeMap;
+
+    #[quickcheck]
+    fn is_234tree(v: Vec<i32>) -> bool {
+        let mut map = RBTreeMap::new();
+
+        for &x in v.iter() {
+            map.insert(x, x);
+            if RBTreeMap::is_234tree(map.root).is_none() {
+                return false;
+            }
+        }
+        for &x in v.iter() {
+            map.remove(&x);
+            if RBTreeMap::is_234tree(map.root).is_none() {
+                return false;
+            }
+        }
+
+
+
+        true
+    }
+
+    #[test]
+    fn reproduce () {
+        let mut map = RBTreeMap::new();
+        let v = vec![1, -1, 2, -2, -3, 0];
+        for &x in v.iter() {
+            map.insert(x, x);
+            assert!(RBTreeMap::is_234tree(map.root).is_some())
+        }
+        for &x in v.iter() {
+            map.remove(&x);
+            assert!(RBTreeMap::is_234tree(map.root).is_some())
+        }
+    }
 }
