@@ -406,7 +406,7 @@ impl<'a, K, V> RBTreeMap<K, V> {
             if p == Node::left_of(g) {
                 //      g
                 //     / \
-                //    p  u
+                //    p   u
                 //    |
                 //    x
                 // u and g may be null
@@ -417,20 +417,20 @@ impl<'a, K, V> RBTreeMap<K, V> {
                     Node::set_color(g, Color::Red);
                     x = g;
                 } else {
-                    //      g             g
-                    //     / \           / \
-                    //    p  u          x  u
-                    //     \           /
-                    //     x    ==>   p
+                    //      g              g
+                    //     / \            / \
+                    //    p   u          x   u
+                    //     \            /
+                    //      x    ==>   p
                     if x == Node::right_of(p) {
                         self.rotate_left(p);
                         x = p;
                     }
                     //      g             p
                     //     / \           / \
-                    //    p  u          x  g
-                    //   /                  \
-                    //  x       ==>         u
+                    //    p   u         x   g
+                    //   /                   \
+                    //  x       ==>           u
                     self.rotate_right(g);
                 }
             } else {
@@ -477,6 +477,14 @@ impl<'a, K, V> RBTreeMap<K, V> {
                         self.rotate_right(y);
                         y = Node::parent_of(y);
                     }
+
+                    //          p              y
+                    //         / \            / \
+                    //        x   y          p  ry
+                    //           / \        / \
+                    //          ly ry  =>  x  ly
+                    // dist   1  2  1      2  2  1
+                    // dist: number of black links to root of this subtree
                     self.rotate_left(p);
                     Node::set_color(Node::right_of(y), Color::Black);
                     x = self.root;
