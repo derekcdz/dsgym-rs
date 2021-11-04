@@ -1,5 +1,5 @@
-use std::collections::{HashMap, BTreeMap};
 use dsgym_rs::rbtree::RBTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 extern crate quickcheck;
 #[macro_use(quickcheck)]
@@ -18,6 +18,10 @@ fn basics() {
     assert_eq!(map.len(), 4);
     assert_eq!(map.contains_key(&"A"), true);
     assert_eq!(map.contains_key(&"ZZZ"), false);
+
+    assert_eq!(map.remove(&"B"), Some(2));
+    assert_eq!(map.len(), 3);
+    assert_eq!(map.remove(&"B"), None);
 }
 
 #[test]
@@ -50,7 +54,7 @@ fn sorted_like_btreemap(v: Vec<i32>) -> bool {
     let mut btmap = BTreeMap::new();
     let mut rbtmap = RBTreeMap::new();
 
-    for x in v.iter() {
+    for &x in v.iter() {
         btmap.insert(x, x);
         rbtmap.insert(x, x);
     }
@@ -67,6 +71,32 @@ fn sorted_like_btreemap(v: Vec<i32>) -> bool {
         return false;
     }
     if rbtit.next().is_some() {
+        return false;
+    }
+    true
+}
+
+#[quickcheck]
+fn insert_and_remove(v: Vec<i32>) -> bool {
+    let mut btmap = BTreeMap::new();
+    let mut rbtmap = RBTreeMap::new();
+
+    for &x in v.iter() {
+        btmap.insert(x, x);
+        rbtmap.insert(x, x);
+    }
+
+    for (&k1, &v1) in btmap.iter() {
+        let x = rbtmap.remove_entry(&k1);
+        if let Some((k2, v2)) = x {
+            if k1 != k2 || v1 != v2 {
+                return false;
+            }
+            continue;
+        }
+        return false;
+    }
+    if rbtmap.len() != 0 {
         return false;
     }
     true
