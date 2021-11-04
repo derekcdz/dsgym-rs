@@ -604,8 +604,6 @@ mod tests {
             }
         }
 
-
-
         true
     }
 
