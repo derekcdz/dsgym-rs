@@ -609,17 +609,17 @@ mod tests {
         true
     }
 
-    #[test]
-    fn reproduce () {
-        let mut map = RBTreeMap::new();
-        let v = vec![1, -1, 2, -2, -3, 0];
-        for &x in v.iter() {
-            map.insert(x, x);
-            assert!(RBTreeMap::is_234tree(map.root).is_some())
-        }
-        for &x in v.iter() {
-            map.remove(&x);
-            assert!(RBTreeMap::is_234tree(map.root).is_some())
-        }
-    }
+    // #[test]
+    // fn reproduce () {
+    //     let mut map = RBTreeMap::new();
+    //     let v = vec![1, -1, 2, -2, -3, 0];
+    //     for &x in v.iter() {
+    //         map.insert(x, x);
+    //         assert!(RBTreeMap::is_234tree(map.root).is_some())
+    //     }
+    //     for &x in v.iter() {
+    //         map.remove(&x);
+    //         assert!(RBTreeMap::is_234tree(map.root).is_some())
+    //     }
+    // }
 }
